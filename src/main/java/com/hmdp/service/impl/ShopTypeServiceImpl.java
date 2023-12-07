@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.ShopType;
@@ -30,23 +31,14 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
 
     @Override
     public Result getAllTypes() {
-        List<String> shopTypeList = stringRedisTemplate.opsForList().range(RedisConstants.TYPE_SHOP_KEY, 0, -1);
-        if (shopTypeList != null && !shopTypeList.isEmpty()) {
-            return Result.ok(parseStr2Obj(shopTypeList));
+        String shopTypeList = stringRedisTemplate.opsForValue().get(RedisConstants.TYPE_SHOP_KEY);
+        if (StrUtil.isNotEmpty(shopTypeList)) {
+            return Result.ok(JSONUtil.toList(shopTypeList, ShopType.class));
         }
-        shopTypeList = query().orderByAsc("sort")
-                .list()
-                .stream()
-                .map((JSONUtil::toJsonStr))
-                .collect(Collectors.toList());
-        stringRedisTemplate.opsForList().rightPushAll(RedisConstants.TYPE_SHOP_KEY, shopTypeList);
-
-        return Result.ok(parseStr2Obj(shopTypeList));
+        List<ShopType> shopTypes = query().orderByAsc("sort").list();
+        shopTypeList = JSONUtil.toJsonStr(shopTypes);
+        stringRedisTemplate.opsForValue().set(RedisConstants.TYPE_SHOP_KEY, shopTypeList);
+        return Result.ok(shopTypes);
     }
 
-    private List<ShopType> parseStr2Obj(List<String> lstr) {
-        return lstr.stream()
-                .map((item -> (ShopType) JSONUtil.toBean(item, ShopType.class, false)))
-                .collect(Collectors.toList());
-    }
 }
