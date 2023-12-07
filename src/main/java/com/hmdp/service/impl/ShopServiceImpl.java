@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.util.RandomUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Shop;
@@ -56,7 +57,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                         .setFieldValueEditor((fieldName, fieldValue) -> fieldValue != null ? fieldValue.toString() : null));
 
         stringRedisTemplate.opsForHash().putAll(shopKey, map);
-        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        // 通过设置一个随机的缓存时间来避免缓存雪崩问题
+        Long randomTime = RandomUtil.randomLong(1,10);
+        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL+randomTime, TimeUnit.MINUTES);
         return Result.ok(shop);
     }
 
