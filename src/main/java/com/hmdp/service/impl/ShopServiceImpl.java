@@ -10,11 +10,13 @@ import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisConstants;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -37,8 +39,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         Shop shop = new Shop();
         if (!shopMap.isEmpty()) {
             BeanUtil.fillBeanWithMap(shopMap, shop, false);
+            return Result.ok(shop);
         }
-
         shop = getById(id);
         if (shop == null) {
             return Result.fail("店铺不存在");
@@ -50,6 +52,27 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                         .setFieldValueEditor((fieldName, fieldValue) -> fieldValue != null ? fieldValue.toString() : null));
 
         stringRedisTemplate.opsForHash().putAll(shopKey, map);
+        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return Result.ok(shop);
     }
+
+    @Override
+    public Result updateShopById(Shop shop) {
+        // 实现更新缓存的功能，为保证一致性采用更新是删除缓存的策略
+        // 数据校验
+        Long id = shop.getId();
+        if (id == null) {
+            return Result.fail("输入数据格式错误");
+        }
+
+        boolean isUpdated = updateById(shop);
+        if (!isUpdated) {
+            return Result.fail("数据写入失败");
+        }
+
+        stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + id);
+        return Result.ok();
+
+    }
 }
+
