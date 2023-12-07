@@ -43,6 +43,10 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
         shop = getById(id);
         if (shop == null) {
+            // 查询失败，为防止缓存穿透问题，通过使用缓存空值来解决缓存穿透问题
+            // 缓存穿透问题：缓存和数据库均不存在该数据。解决办法：1.缓存空值 2布隆过滤
+            // 缓存空值，这里为了方便调试，设置了较长时间的缓存时间
+            stringRedisTemplate.opsForValue().set(shopKey, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
             return Result.fail("店铺不存在");
         }
         Map<String, Object> map = BeanUtil.beanToMap(shop, new HashMap<>()
