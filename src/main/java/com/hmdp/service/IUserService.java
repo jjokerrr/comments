@@ -16,6 +16,6 @@ import javax.servlet.http.HttpSession;
  * @since 2021-12-22
  */
 public interface IUserService extends IService<User> {
-    public Result loginCheck(LoginFormDTO loginFormDTO, HttpSession httpSession);
+    Result loginCheck(LoginFormDTO loginFormDTO, HttpSession httpSession);
 
 }

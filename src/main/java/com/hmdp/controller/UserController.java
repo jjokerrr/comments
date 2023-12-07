@@ -7,12 +7,16 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.UserInfo;
 import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
+
+import java.util.concurrent.TimeUnit;
 
 import static com.baomidou.mybatisplus.core.toolkit.Wrappers.query;
 
@@ -35,6 +39,9 @@ public class UserController {
     @Resource
     private IUserInfoService userInfoService;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
     /**
      * 发送手机验证码
      */
@@ -49,7 +56,10 @@ public class UserController {
 
         String code = RandomUtil.randomNumbers(6);
         log.info("code is {}", code);
-        session.setAttribute(phone, code);
+        //  使用Redis进行数据的存储
+        //  session.setAttribute(phone, code);
+        stringRedisTemplate.opsForValue()
+                .set(RedisConstants.LOGIN_CODE_KEY + phone, code, RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
         return Result.ok();
     }
@@ -61,6 +71,7 @@ public class UserController {
      */
     @PostMapping("/login")
     public Result login(@RequestBody LoginFormDTO loginForm, HttpSession session) {
+
         return userService.loginCheck(loginForm, session);
     }
 

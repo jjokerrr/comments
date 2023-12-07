@@ -1,29 +1,37 @@
 package com.hmdp.interceptor;
 
+import cn.hutool.core.bean.BeanUtil;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class LoginCheckInterceptor implements HandlerInterceptor {
+
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-
-        HttpSession session = request.getSession();
-        User user = (User) session.getAttribute("user");
-        System.out.println(user);
+//        String token = request.getHeader("authorization");
+//        String tokenKey = RedisConstants.LOGIN_USER_KEY + token;
+        UserDTO user = UserHolder.getUser();
         if (user == null) {
             log.error("用户未登录");
             response.setStatus(401);
             return false;
         }
-        // 不能将保存有用户敏感信息的User对象返回给前端，这里应该将User封装成UserDto返回
-        UserHolder.saveUser(user.toUserDto());
+        //  HttpSession session = request.getSession();
+        //  User user = (User) session.getAttribute("user");
+
         return true;
     }
 
