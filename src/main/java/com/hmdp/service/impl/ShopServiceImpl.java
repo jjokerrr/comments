@@ -3,6 +3,8 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Shop;
@@ -36,10 +38,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Override
     public Result queryById(Long id) {
         String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
-        Map<Object, Object> shopMap = stringRedisTemplate.opsForHash().entries(shopKey);
-        Shop shop = new Shop();
-        if (!shopMap.isEmpty()) {
-            BeanUtil.fillBeanWithMap(shopMap, shop, false);
+        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
+        if (StrUtil.isEmpty(shopJson)) {
+            return Result.fail("店铺不存在");
+        }
+        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+        if (shop != null) {
             return Result.ok(shop);
         }
         shop = getById(id);
@@ -58,8 +62,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
         stringRedisTemplate.opsForHash().putAll(shopKey, map);
         // 通过设置一个随机的缓存时间来避免缓存雪崩问题
-        Long randomTime = RandomUtil.randomLong(1,10);
-        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL+randomTime, TimeUnit.MINUTES);
+        Long randomTime = RandomUtil.randomLong(1, 10);
+        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL + randomTime, TimeUnit.MINUTES);
         return Result.ok(shop);
     }
 
