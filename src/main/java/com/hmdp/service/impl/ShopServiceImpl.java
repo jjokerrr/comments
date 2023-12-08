@@ -4,22 +4,29 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Shop;
+import com.hmdp.entity.ShopType;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisConstants;
+import com.hmdp.utils.RedisData;
 import com.hmdp.utils.RedisLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -39,11 +46,16 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Autowired
     private RedisLock redisLock;
 
-    // TODO 解决缓存击穿的两种实现方法，使用互斥锁和逻辑过期时间
+    // 创建线程池,创建10个线程的线程池用于加载逻辑过期时间
+    ExecutorService executor = Executors.newFixedThreadPool(10);
+
+
+    //  解决缓存击穿的两种实现方法，使用互斥锁和逻辑过期时间
     @Override
     public Result queryById(Long id) {
 //        Shop shopById = getShopById(id);
-        Shop shopById = getByIdWithMutex(id);
+//        Shop shopById = getByIdWithMutex(id);
+        Shop shopById = getByIdWithLogicTime(id);
         if (shopById == null) {
             return Result.fail("店铺不存在");
         }
@@ -121,7 +133,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
         Shop shop = null;
         try {
-            if (!redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY, RedisConstants.LOCK_SHOP_TTL)) {
+            if (!redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
                 // 休眠重试
                 Thread.sleep(50);
                 return getByIdWithMutex(id);
@@ -140,9 +152,50 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            redisLock.unLock(RedisConstants.LOCK_SHOP_KEY);
+            redisLock.unLock(RedisConstants.LOCK_SHOP_KEY + id);
         }
         return shop;
     }
+
+    // 使用逻辑过期来解决缓存击穿问题
+    private Shop getByIdWithLogicTime(Long id) {
+        String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
+        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
+        if (StrUtil.isEmpty(shopJson)) {
+            return null;
+        }
+
+        RedisData redisData = JSONUtil.toBean(shopJson, RedisData.class);
+        Shop shop = JSONUtil.toBean((JSONObject) redisData.getData(), Shop.class);
+        LocalDateTime expireTime = redisData.getExpireTime();
+        if (expireTime.isAfter(LocalDateTime.now())) {
+            // 数据未过期，直接返回
+            return shop;
+        }
+        // 尝试获取互斥锁
+
+        if (redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
+            try {
+                executor.submit(() -> {
+                    Shop byId = getById(id);
+                    RedisData shopData = new RedisData();
+                    shopData.setData(byId);
+                    shopData.setExpireTime(LocalDateTime.now().plusSeconds(10L));
+                    // 热点key不设置过期时间
+                    stringRedisTemplate.opsForValue().set(shopKey, JSONUtil.toJsonStr(shopData));
+
+                });
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                redisLock.unLock(RedisConstants.LOCK_SHOP_KEY + id);
+            }
+        }
+
+
+        return shop;
+    }
+
+
 }
 
