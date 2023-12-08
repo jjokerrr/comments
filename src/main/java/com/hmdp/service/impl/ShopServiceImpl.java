@@ -12,6 +12,7 @@ import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisConstants;
+import com.hmdp.utils.RedisLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -35,36 +36,19 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
+    @Autowired
+    private RedisLock redisLock;
+
+    // TODO 解决缓存击穿的两种实现方法，使用互斥锁和逻辑过期时间
     @Override
     public Result queryById(Long id) {
-        String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
-        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
-        if (StrUtil.isEmpty(shopJson)) {
+//        Shop shopById = getShopById(id);
+        Shop shopById = getByIdWithMutex(id);
+        if (shopById == null) {
             return Result.fail("店铺不存在");
         }
-        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-        if (shop != null) {
-            return Result.ok(shop);
-        }
-        shop = getById(id);
-        if (shop == null) {
-            // 查询失败，为防止缓存穿透问题，通过使用缓存空值来解决缓存穿透问题
-            // 缓存穿透问题：缓存和数据库均不存在该数据。解决办法：1.缓存空值 2布隆过滤
-            // 缓存空值，这里为了方便调试，设置了较长时间的缓存时间
-            stringRedisTemplate.opsForValue().set(shopKey, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
-            return Result.fail("店铺不存在");
-        }
-        Map<String, Object> map = BeanUtil.beanToMap(shop, new HashMap<>()
-                , CopyOptions
-                        .create()
-                        .setIgnoreNullValue(true)
-                        .setFieldValueEditor((fieldName, fieldValue) -> fieldValue != null ? fieldValue.toString() : null));
+        return Result.ok(shopById);
 
-        stringRedisTemplate.opsForHash().putAll(shopKey, map);
-        // 通过设置一个随机的缓存时间来避免缓存雪崩问题
-        Long randomTime = RandomUtil.randomLong(1, 10);
-        stringRedisTemplate.expire(shopKey, RedisConstants.CACHE_SHOP_TTL + randomTime, TimeUnit.MINUTES);
-        return Result.ok(shop);
     }
 
     @Override
@@ -84,6 +68,81 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + id);
         return Result.ok();
 
+    }
+
+    /*
+     * 解决缓存穿透和缓存雪崩问题
+     * @Parameter [id]
+     * @Return Shop
+     */
+    private Shop getShopById(Long id) {
+        String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
+        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
+        if (StrUtil.isNotEmpty(shopJson)) {
+            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+            return shop;
+        }
+
+        if (shopJson != null) {
+            return null;
+        }
+        Shop shop = getById(id);
+        if (shop == null) {
+            // 查询失败，为防止缓存穿透问题，通过使用缓存空值来解决缓存穿透问题
+            // 缓存穿透问题：缓存和数据库均不存在该数据。解决办法：1.缓存空值 2布隆过滤
+            // 缓存空值，这里为了方便调试，设置了较长时间的缓存时间
+            stringRedisTemplate.opsForValue().set(shopKey, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+            return null;
+        }
+
+        String shopStr = JSONUtil.toJsonStr(shop);
+        Long randomTime = RandomUtil.randomLong(1, 10);
+        // 通过设置一个随机的缓存时间来避免缓存雪崩问题
+        stringRedisTemplate.opsForValue().set(shopKey, shopStr, RedisConstants.CACHE_SHOP_TTL + randomTime, TimeUnit.MINUTES);
+        return shop;
+    }
+
+    /*
+     * 使用互斥锁解决缓存击穿问题，解决缓存穿透和缓存雪崩问题
+     * @Parameter [id]
+     * @Return Shop
+     */
+    private Shop getByIdWithMutex(Long id) {
+        String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
+        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
+        if (StrUtil.isNotEmpty(shopJson)) {
+            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+            return shop;
+        }
+
+        if (shopJson != null) {
+            return null;
+        }
+
+        Shop shop = null;
+        try {
+            if (!redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY, RedisConstants.LOCK_SHOP_TTL)) {
+                // 休眠重试
+                Thread.sleep(50);
+                return getByIdWithMutex(id);
+            }
+
+            shop = getById(id);
+            if (shop == null) {
+                stringRedisTemplate.opsForValue().set(shopKey, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+                return null;
+            }
+
+            String shopStr = JSONUtil.toJsonStr(shop);
+            Long randomTime = RandomUtil.randomLong(1, 10);
+            // 通过设置一个随机的缓存时间来避免缓存雪崩问题
+            stringRedisTemplate.opsForValue().set(shopKey, shopStr, RedisConstants.CACHE_SHOP_TTL + randomTime, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            redisLock.unLock(RedisConstants.LOCK_SHOP_KEY);
+        }
+        return shop;
     }
 }
 
