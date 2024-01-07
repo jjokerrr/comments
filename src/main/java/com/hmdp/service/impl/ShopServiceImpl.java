@@ -1,7 +1,5 @@
 package com.hmdp.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
@@ -13,21 +11,17 @@ import com.hmdp.entity.ShopType;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisData;
 import com.hmdp.utils.RedisLock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * <p>
@@ -46,6 +40,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Autowired
     private RedisLock redisLock;
 
+    @Autowired
+    private CacheClient cacheClient;
+
     // 创建线程池,创建10个线程的线程池用于加载逻辑过期时间
     ExecutorService executor = Executors.newFixedThreadPool(10);
 
@@ -55,7 +52,10 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     public Result queryById(Long id) {
 //        Shop shopById = getShopById(id);
 //        Shop shopById = getByIdWithMutex(id);
-        Shop shopById = getByIdWithLogicTime(id);
+//        Shop shopById = getByIdWithLogicTime(id);
+        // 使用封装好的工具类
+//        Shop shopById = cacheClient.queryWirthPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        Shop shopById = cacheClient.queryWithMutex(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById);
         if (shopById == null) {
             return Result.fail("店铺不存在");
         }
@@ -63,6 +63,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     }
 
+    @Transactional
     @Override
     public Result updateShopById(Shop shop) {
         // 实现更新缓存的功能，为保证一致性采用更新是删除缓存的策略
@@ -157,7 +158,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         return shop;
     }
 
-    // 使用逻辑过期来解决缓存击穿问题
+    // 使用逻辑过期来解决缓存击穿问题，使用逻辑过期的热点key问题需要提前手动预载热点key进入到缓存中，使热点数据常驻缓存
     private Shop getByIdWithLogicTime(Long id) {
         String shopKey = RedisConstants.CACHE_SHOP_KEY + id;
         String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
@@ -192,7 +193,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             }
         }
 
-
+        // 未获取互斥锁的对象直接将旧的缓存对象返回，会存在短期的数据不一致问题
         return shop;
     }
 

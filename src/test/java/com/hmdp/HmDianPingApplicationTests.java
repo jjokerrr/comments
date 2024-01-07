@@ -3,7 +3,6 @@ package com.hmdp;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
-import com.hmdp.service.impl.ShopServiceImpl;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisData;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class HmDianPingApplicationTests {
 
 
     @Test
-    public void preHotRedisData(){
+    public void preLoadRedisData(){
         Shop byId = shopService.getById(1);
         RedisData redisData = new RedisData();
         redisData.setExpireTime(LocalDateTime.now().plusSeconds(20L));
