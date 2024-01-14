@@ -4,6 +4,7 @@ package com.hmdp.controller;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.service.ISeckillVoucherService;
+import com.hmdp.service.IVoucherOrderService;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,9 @@ public class VoucherOrderController {
     @Resource
     private ISeckillVoucherService seckillVoucherService;
 
+    @Resource
+    private IVoucherOrderService voucherOrderService;
+
     @PostMapping("seckill/{id}")
     public Result seckillVoucher(@PathVariable("id") Long voucherId) {
         // 数据校验
@@ -38,8 +42,9 @@ public class VoucherOrderController {
             return Result.fail("秒杀已经结束");
         }
 
-        // 保存订单信息
-        long orderId = seckillVoucherService.order(seckillVoucher);
+        // 保存订单信息，当订单id号小于零，表示更新失败
+        long orderId = voucherOrderService.order(seckillVoucher);
+
         if (orderId < 0) {
             return Result.fail("库存数量不足");
         }
