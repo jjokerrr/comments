@@ -6,6 +6,8 @@ import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.ILock;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.UserHolder;
 import org.springframework.aop.framework.AopContext;
@@ -32,6 +34,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWorker redisIdWorker; // 使用redis全局id生成器创建订单ID
 
+    @Resource
+    private ILock lock;
+
     @Override
     public long order(SeckillVoucher seckillVoucher) {
         // 检查库存数量，这个必须放在事务中，防止并发问题导致的失败
@@ -40,12 +45,25 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
         // 通过锁用户的唯一对象保证每个用户只能购买一份当前优惠券
         Long id = UserHolder.getUser().getId();
-        synchronized (id.toString().intern()) {
-            // 锁和事务那个范围更大一些的问题：锁空间 > 事务空间，防止锁以释放而事务并未提交的问题
-            // 使用代理对象的原因，当使用事务接口的时候说明当前实际执行的方法未代理方法，如果使用原来的方法是达不到想要的效果的
+        // 获取分布式锁
+        if (!lock.tryLock(RedisConstants.LOCK_PREFIX + ":order:" + id, 10L)) {
+            // 获取锁失败，返回错误信息
+            return -1;
+        }
+
+        try {
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(seckillVoucher);
+        } finally {
+            // 释放分布式锁
+            lock.unLock(RedisConstants.LOCK_PREFIX + ":order:" + id);
         }
+
+//        synchronized (id.toString().intern()) {
+//            // 锁和事务那个范围更大一些的问题：锁空间 > 事务空间，防止锁以释放而事务并未提交的问题
+//            // 使用代理对象的原因，当使用事务接口的时候说明当前实际执行的方法未代理方法，如果使用原来的方法是达不到想要的效果的
+//
+//        }
 
 
     }
