@@ -6,10 +6,7 @@ import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.hmdp.utils.ILock;
-import com.hmdp.utils.RedisConstants;
-import com.hmdp.utils.RedisIdWorker;
-import com.hmdp.utils.UserHolder;
+import com.hmdp.utils.*;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +31,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWorker redisIdWorker; // 使用redis全局id生成器创建订单ID
 
-    @Resource
-    private ILock lock;
 
     @Override
     public long order(SeckillVoucher seckillVoucher) {
@@ -43,6 +38,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (seckillVoucher.getStock() < 1) {
             return -1;
         }
+        ILock lock = new RedisLock();
         // 通过锁用户的唯一对象保证每个用户只能购买一份当前优惠券
         Long id = UserHolder.getUser().getId();
         // 获取分布式锁

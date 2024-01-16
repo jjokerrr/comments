@@ -5,16 +5,11 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
-import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Shop;
-import com.hmdp.entity.ShopType;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.hmdp.utils.CacheClient;
-import com.hmdp.utils.RedisConstants;
-import com.hmdp.utils.RedisData;
-import com.hmdp.utils.RedisLock;
+import com.hmdp.utils.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -37,8 +32,6 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-    @Autowired
-    private RedisLock redisLock;
 
     @Autowired
     private CacheClient cacheClient;
@@ -131,7 +124,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (shopJson != null) {
             return null;
         }
-
+        ILock redisLock = new RedisLock();
         Shop shop = null;
         try {
             if (!redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
@@ -174,7 +167,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             return shop;
         }
         // 尝试获取互斥锁
-
+        ILock redisLock = new RedisLock();
         if (redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
             try {
                 executor.submit(() -> {

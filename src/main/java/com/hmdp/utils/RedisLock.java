@@ -8,18 +8,17 @@ import javax.annotation.Resource;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-@Component
+
 public class RedisLock implements ILock {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
-    private String uuid;
+    // 当前线程的唯一标识
+    private final String uuid = UUID.randomUUID().toString() + Thread.currentThread().getId();
 
     @Override
     public boolean tryLock(String key, Long TTL) {
-        // 获取当前线程标识
-        uuid = UUID.randomUUID().toString() + Thread.currentThread().getId();
         Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, uuid, TTL, TimeUnit.SECONDS);
         // 这里使用工具类防止自动拆包的时候出现空指针异常
         return BooleanUtil.isTrue(flag);
