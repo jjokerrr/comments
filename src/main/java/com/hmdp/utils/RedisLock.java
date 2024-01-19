@@ -1,22 +1,20 @@
 package com.hmdp.utils;
 
 import cn.hutool.core.util.BooleanUtil;
+import com.hmdp.HmDianPingApplication;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.util.Collections;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 
 public class RedisLock implements ILock {
 
-    @Resource
+
     private StringRedisTemplate stringRedisTemplate;
 
     // 当前线程的唯一标识
@@ -29,6 +27,10 @@ public class RedisLock implements ILock {
         UNLOCK_SCRIPT = new DefaultRedisScript<>();
         UNLOCK_SCRIPT.setLocation(new ClassPathResource("script/unlock.lua"));
         UNLOCK_SCRIPT.setResultType(Long.class);
+    }
+
+    public RedisLock(StringRedisTemplate stringRedisTemplate) {
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     @Override

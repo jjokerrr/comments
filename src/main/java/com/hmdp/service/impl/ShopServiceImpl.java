@@ -124,7 +124,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (shopJson != null) {
             return null;
         }
-        ILock redisLock = new RedisLock();
+        ILock redisLock = new RedisLock(stringRedisTemplate);
         Shop shop = null;
         try {
             if (!redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
@@ -167,7 +167,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             return shop;
         }
         // 尝试获取互斥锁
-        ILock redisLock = new RedisLock();
+        ILock redisLock = new RedisLock(stringRedisTemplate);
         if (redisLock.tryLock(RedisConstants.LOCK_SHOP_KEY + id, RedisConstants.LOCK_SHOP_TTL)) {
             try {
                 executor.submit(() -> {

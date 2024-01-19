@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -19,8 +20,6 @@ public class CacheClient {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
-    @Autowired
-    private RedisLock redisLock;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
 
@@ -87,7 +86,7 @@ public class CacheClient {
             return res;
         }
         // 尝试获取互斥锁
-
+        ILock redisLock = new RedisLock(stringRedisTemplate);
         String lockKey = RedisConstants.LOCK_PREFIX + key;
         if (redisLock.tryLock(lockKey, RedisConstants.LOCK_TTL)) {
             try {

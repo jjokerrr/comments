@@ -7,11 +7,14 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.*;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -31,18 +34,24 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWorker redisIdWorker; // 使用redis全局id生成器创建订单ID
 
+    @Resource
+    private RedissonClient redissionClient;
+
 
     @Override
-    public long order(SeckillVoucher seckillVoucher) {
+    public long order(SeckillVoucher seckillVoucher) throws InterruptedException {
         // 检查库存数量，这个必须放在事务中，防止并发问题导致的失败
         if (seckillVoucher.getStock() < 1) {
             return -1;
         }
-        ILock lock = new RedisLock();
+//        ILock lock = new RedisLock();
         // 通过锁用户的唯一对象保证每个用户只能购买一份当前优惠券
         Long id = UserHolder.getUser().getId();
-        // 获取分布式锁
-        if (!lock.tryLock(RedisConstants.LOCK_PREFIX + ":order:" + id, 10L)) {
+
+        // 使用RedissonClient来获取分布式锁
+        RLock lock = redissionClient.getLock(RedisConstants.LOCK_PREFIX + ":order:" + id);
+        // 获取分布式锁,当方法空参的时候，不存在超时释放锁的机制
+        if (!lock.tryLock(2, TimeUnit.SECONDS)) {
             // 获取锁失败，返回错误信息
             return -1;
         }
@@ -51,8 +60,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(seckillVoucher);
         } finally {
-            // 释放分布式锁
-            lock.unLock(RedisConstants.LOCK_PREFIX + ":order:" + id);
+            // 释放分布式锁,直接使用redisson释放分布式锁方法
+            lock.unlock();
         }
 
 //        synchronized (id.toString().intern()) {
