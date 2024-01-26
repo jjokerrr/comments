@@ -7,6 +7,7 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.*;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
@@ -16,9 +17,10 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.util.Collections;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * <p>
@@ -28,6 +30,7 @@ import java.util.concurrent.TimeUnit;
  * @author 虎哥
  * @since 2021-12-22
  */
+@Slf4j
 @Service
 public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
 
@@ -44,6 +47,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    private final BlockingQueue<VoucherOrder> BLOCK_QUEUE = new ArrayBlockingQueue<>(1024 * 1024);
+
+    private static final ExecutorService executors = Executors.newFixedThreadPool(3);
+
+    private IVoucherOrderService proxy;
+
+
     public final static DefaultRedisScript<Long> SECKILL_CHECK_SCRIPT;
 
     //
@@ -56,6 +66,49 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     private final long REPEAT_BUY = -2L;  // 单人重复购买
     private final long SICK_STOCK = -1L;  // 库存数量不足
+
+
+    @PostConstruct
+    private void init() {
+        // 使用@PostConstruct注解在创建bean对象的时候启动守护进程
+        executors.submit(new VoucherOrderHandler());
+    }
+
+
+    private class VoucherOrderHandler implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    VoucherOrder voucherOrder = BLOCK_QUEUE.take();
+                    handleOrder(voucherOrder);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+    }
+
+    private void handleOrder(VoucherOrder voucherOrder) throws InterruptedException {
+        // 通过锁用户的唯一对象保证每个用户只能购买一份当前优惠券
+        Long userId = voucherOrder.getUserId();
+
+        // 使用RedissonClient来获取分布式锁
+        RLock lock = redissionClient.getLock(RedisConstants.LOCK_PREFIX + ":order:" + userId);
+        // 获取分布式锁,当方法空参的时候，不存在超时释放锁的机制，当输出为三个参数的时候，输入的三个参数分别为等待重试时间，超时时间和时间单位
+        if (!lock.tryLock(1, 2, TimeUnit.SECONDS)) {
+            // 获取锁失败，返回错误信息
+            log.error("插入订单失败");
+        }
+
+        try {
+            proxy.createVoucherOrder(voucherOrder);
+        } finally {
+            // 释放分布式锁,直接使用redisson释放分布式锁方法
+            lock.unlock();
+        }
+
+    }
 
 
     @Override
@@ -72,11 +125,20 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
         // 校验成功，创建全局唯一订单id
-        Long id = UserHolder.getUser().getId();
-        long orderId = redisIdWorker.nextId(RedisConstants.LOCK_PREFIX + "order:" + id);
+        Long userId = UserHolder.getUser().getId();
+        long orderId = redisIdWorker.nextId(RedisConstants.LOCK_PREFIX + "order:" + userId);
 
-        // TODO 将信息添加到阻塞队列，等待守护线程将数据写入数据库中
-        String todo;
+        // 创建订单对象
+        VoucherOrder voucherOrder = new VoucherOrder();
+        voucherOrder.setUserId(userId);
+        voucherOrder.setVoucherId(seckillVoucher.getVoucherId());
+        voucherOrder.setId(orderId);
+
+        proxy = (IVoucherOrderService) AopContext.currentProxy();
+
+        // 将订单对象放到阻塞队列中
+        BLOCK_QUEUE.add(voucherOrder);
+
 
         // 返回全局订单id
         return orderId;
@@ -155,6 +217,22 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         save(voucherOrder);
 
         return voucherId;
+    }
+
+    @Override
+    public void createVoucherOrder(VoucherOrder voucherOrder) {
+        // 当剩余库存数量大于0的时候，即可进行数据库的更新操作
+        boolean isSuccessed = seckillVoucherService.update()
+                .setSql("stock = stock-1")
+                .eq("voucher_id", voucherOrder.getVoucherId())
+                .gt("stock", 0)
+                .update();
+        if (!isSuccessed) {
+            log.error("插入失败");
+        }
+
+        // 保存
+        save(voucherOrder);
     }
 
 
