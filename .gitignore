@@ -1,6 +1,6 @@
 HELP.md
 target/
-nginx-1.18.0
+nginx-1.18.0/*
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

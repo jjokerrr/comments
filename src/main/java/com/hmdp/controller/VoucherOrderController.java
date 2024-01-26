@@ -31,7 +31,7 @@ public class VoucherOrderController {
     private IVoucherOrderService voucherOrderService;
 
     @PostMapping("seckill/{id}")
-    public Result seckillVoucher(@PathVariable("id") Long voucherId) {
+    public Result seckillVoucher(@PathVariable("id") Long voucherId) throws InterruptedException {
         // 数据校验
         SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
 
@@ -46,7 +46,7 @@ public class VoucherOrderController {
         long orderId = voucherOrderService.order(seckillVoucher);
 
         if (orderId < 0) {
-            return Result.fail("库存数量不足");
+            return orderId == -1L ? Result.fail("库存数量不足"): Result.fail("禁止重复下单");
         }
         return Result.ok(orderId);
     }
