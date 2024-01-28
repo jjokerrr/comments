@@ -1,18 +1,24 @@
 package com.hmdp;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.Shop;
+import com.hmdp.entity.VoucherOrder;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisData;
 import com.hmdp.utils.RedisIdWorker;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,7 +60,7 @@ class HmDianPingApplicationTests {
         for (int i = 0; i < 300; i++) {
             executors.submit(() -> {
                 long order = redisIdWorker.nextId("order");
-                System.out.println("id ="+ order);
+                System.out.println("id =" + order);
                 countDownLatch.countDown();
             });
         }
@@ -64,8 +70,27 @@ class HmDianPingApplicationTests {
 
     @Test
     public void generateId() {
-        long order = redisIdWorker.nextId("order");
-        System.out.printf("id=" + order);
+        long voucherId = 12L;
+        String voucherKey = "seckill:stock:" + voucherId;
+        String s = stringRedisTemplate.opsForValue().get(voucherKey);
+        System.out.println(s);
 
+    }
+
+    @Test
+    public void getMsg() {
+        String streamKey = "stream.orders";
+        try {
+            stringRedisTemplate.opsForStream().createGroup(streamKey, "g1");
+        }catch (Exception e){
+
+        }
+        List<MapRecord<String, Object, Object>> recordList = stringRedisTemplate.opsForStream().read(
+                Consumer.from("g1", "c1"),
+                StreamReadOptions.empty().block(Duration.ofSeconds(2)).count(1),
+                StreamOffset.create(streamKey, ReadOffset.lastConsumed()));
+        MapRecord<String, Object, Object> record = recordList.get(0);
+        VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(record.getValue(), new VoucherOrder(), true);
+        System.out.println(voucherOrder);
     }
 }
