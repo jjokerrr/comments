@@ -27,3 +27,5 @@ mybatis-plus:
 logging:
   level:
     com.hmdp: debug
+
+#upload-dir: E:\Study\java\javaProject\hm-dianping\hm-dianping\nginx-1.18.0/html/hmdp/imgs/blogs

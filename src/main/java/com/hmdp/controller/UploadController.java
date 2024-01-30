@@ -45,6 +45,7 @@ public class UploadController {
     }
 
     private String createNewFileName(String originalFilename) {
+
         // 获取后缀
         String suffix = StrUtil.subAfter(originalFilename, ".", true);
         // 生成目录

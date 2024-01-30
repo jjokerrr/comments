@@ -9,6 +9,7 @@ import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -82,14 +83,16 @@ public class UserController {
      */
     @PostMapping("/logout")
     public Result logout() {
-        // TODO 实现登出功能
-        return Result.fail("功能未完成");
+        UserHolder.removeUser();
+        return Result.ok("登出成功");
     }
 
     @GetMapping("/me")
     public Result me() {
-        // TODO 获取当前登录的用户并返回
-        return Result.fail("功能未完成");
+        if (UserHolder.getUser() == null) {
+            return Result.fail("用户未登录");
+        }
+        return Result.ok(UserHolder.getUser());
     }
 
     @GetMapping("/info/{id}")
