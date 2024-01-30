@@ -47,8 +47,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 //        Shop shopById = getByIdWithMutex(id);
 //        Shop shopById = getByIdWithLogicTime(id);
         // 使用封装好的工具类
-//        Shop shopById = cacheClient.queryWirthPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
-        Shop shopById = cacheClient.queryWithMutex(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById);
+        Shop shopById = cacheClient.queryWirthPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+//        Shop shopById = cacheClient.queryWithMutex(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById);
         if (shopById == null) {
             return Result.fail("店铺不存在");
         }

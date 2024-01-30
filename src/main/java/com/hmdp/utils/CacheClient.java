@@ -70,7 +70,7 @@ public class CacheClient {
     }
 
 
-    // 使用缓存击穿热点key问题需要预载缓存
+    // 使用逻辑过期时间解决热点key问题，需要预载缓存
     public <R, L> R queryWithMutex(String keyPrefix, L id, Class<R> type, Function<L, R> function) {
         String key = keyPrefix + id;
         String json = stringRedisTemplate.opsForValue().get(key);
