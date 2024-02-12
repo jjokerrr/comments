@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.geo.Point;
+import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -19,9 +21,11 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @SpringBootTest
 class HmDianPingApplicationTests {
@@ -82,7 +86,7 @@ class HmDianPingApplicationTests {
         String streamKey = "stream.orders";
         try {
             stringRedisTemplate.opsForStream().createGroup(streamKey, "g1");
-        }catch (Exception e){
+        } catch (Exception e) {
 
         }
         List<MapRecord<String, Object, Object>> recordList = stringRedisTemplate.opsForStream().read(
@@ -92,5 +96,19 @@ class HmDianPingApplicationTests {
         MapRecord<String, Object, Object> record = recordList.get(0);
         VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(record.getValue(), new VoucherOrder(), true);
         System.out.println(voucherOrder);
+    }
+
+    @Test
+    public void loadShopGeo() {
+        List<Shop> shopList = shopService.list();
+        Map<Long, List<Shop>> collect = shopList.stream().collect(Collectors.groupingBy(Shop::getTypeId));
+        for (Map.Entry<Long, List<Shop>> entry : collect.entrySet()) {
+            String geoKey = "shop:geo:" + entry.getKey();
+            List<Shop> shops = entry.getValue();
+            List<RedisGeoCommands.GeoLocation<String>> collect1 = shops.stream().map(shop ->
+                    new RedisGeoCommands.GeoLocation<String>(shop.getId().toString(), new Point(shop.getX(), shop.getY()))
+            ).collect(Collectors.toList());
+            stringRedisTemplate.opsForGeo().add(geoKey, collect1);
+        }
     }
 }
