@@ -18,4 +18,7 @@ import javax.servlet.http.HttpSession;
 public interface IUserService extends IService<User> {
     Result loginCheck(LoginFormDTO loginFormDTO, HttpSession httpSession);
 
+    Boolean sign();
+
+    Long signCount();
 }

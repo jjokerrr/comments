@@ -112,7 +112,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         if (contents.size() <= from) {
             return Collections.emptyList();
         }
-
+        // 返回前端数据
         List<Long> ids = new ArrayList<>(end - from + 1);
         Map<Long, Distance> distanceMap = new HashMap<>(end - from + 1);
         contents.stream().skip(from).forEach(geoLocationGeoResult -> {

@@ -2,6 +2,7 @@ package com.hmdp.controller;
 
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
@@ -118,6 +119,7 @@ public class UserController {
 
     /**
      * 根据用户id查询用户信息
+     *
      * @Parameter [userId]
      * @Return Result
      */
@@ -131,6 +133,18 @@ public class UserController {
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
         // 返回
         return Result.ok(userDTO);
+    }
+
+    @PostMapping("/sign")
+    public Result sign() {
+        Boolean success = userService.sign();
+        if(BooleanUtil.isTrue(success)) return Result.fail("签到失败");
+        return Result.ok();
+    }
+    @GetMapping("/sign/count")
+    public Result singCount(){
+        Long count = userService.signCount();
+        return Result.ok(count);
     }
 
 }
